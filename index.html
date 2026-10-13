@@ -3,430 +3,684 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cube Clash 3D</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nerf Blaster Arena 3D</title>
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: #07111f;
-    color: white;
-    font-family: Arial, sans-serif;
-  }
-  #hud {
-    position: fixed;
-    z-index: 2;
-    top: 16px;
-    left: 16px;
-    padding: 14px 18px;
-    border: 1px solid #34506d;
-    border-radius: 14px;
-    background: #07111fe8;
-    line-height: 1.8;
-  }
-  #hud strong { color: #57eaff; }
-  #help {
-    position: fixed;
-    z-index: 2;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: max-content;
-    max-width: 94%;
-    padding: 10px 16px;
-    border-radius: 12px;
-    background: #07111fe8;
-    text-align: center;
-    font-size: 13px;
-  }
-  #message {
-    position: fixed;
-    z-index: 3;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #07111fa8;
-  }
-  #panel {
-    width: min(420px, 90%);
-    padding: 28px;
-    text-align: center;
-    border: 1px solid #3d7398;
-    border-radius: 20px;
-    background: #0d1d30;
-    box-shadow: 0 0 50px #00bfff25;
-  }
-  h1 { margin-top: 0; color: #57eaff; }
-  button {
-    padding: 12px 24px;
-    border: 0;
-    border-radius: 10px;
-    background: #16bce7;
-    color: #061321;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-  button:hover { background: #80efff; }
-  #restart { display: none; margin-top: 8px; }
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#07111f;color:white;font-family:Arial,sans-serif}
+button{border:0;border-radius:10px;padding:12px 18px;font-weight:bold;font-size:15px;cursor:pointer;background:#35d9ff;color:#07111f}
+button:hover{filter:brightness(1.18)}
+button:disabled{opacity:.4;cursor:not-allowed}
+#hud{position:fixed;top:12px;left:12px;z-index:3;background:#07111fe8;padding:13px 17px;border:1px solid #31516e;border-radius:12px;line-height:1.8;display:none}
+#hud strong{color:#50eaff}
+#crosshair{position:fixed;z-index:2;pointer-events:none;width:20px;height:20px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);display:none;box-shadow:0 0 7px #00d9ff}
+#menu{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:linear-gradient(#07111fdc,#07111ff5);overflow:auto;padding:15px}
+.panel{width:min(570px,100%);max-height:96vh;overflow-y:auto;background:#10243a;border:1px solid #2b7398;border-radius:22px;padding:24px;box-shadow:0 0 45px #00bfff1a;text-align:center}
+h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
+.subtitle{color:#bed4e7;line-height:1.5}
+.coins{font-size:23px;font-weight:bold;color:#ffe477;margin:15px}
+.shop{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+.item{padding:13px 10px;border:1px solid #36516c;border-radius:12px;background:#0a192b;text-align:left}
+.item h3{margin:0 0 8px;color:#77eaff;font-size:16px}
+.item p{font-size:13px;color:#bed4e7;min-height:34px;margin:7px 0}
+.item button{width:100%;padding:10px 5px;font-size:13px}
+#play{width:100%;font-size:19px;padding:15px;margin-top:6px;background:#52e5ff}
+#status{color:#a9c8dd;font-size:13px;min-height:20px}
+#help{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);width:max-content;max-width:95%;padding:9px 13px;background:#07111fe8;border-radius:10px;font-size:12px;text-align:center;display:none}
+@media(max-width:420px){.shop{grid-template-columns:1fr}.panel{padding:17px}.item p{min-height:0}}
 </style>
 </head>
 <body>
+
 <div id="hud">
-  <strong>⚡ CUBE CLASH 3D</strong><br>
-  Score: <span id="score">0</span><br>
-  Energy: <span id="energy">100</span>%<br>
-  Time: <span id="time">60</span>s
+  <strong>NERF BLASTER ARENA</strong><br>
+  🪙 Coins: <span id="coins">0</span><br>
+  🎯 Defeated: <span id="kills">0</span><br>
+  ❤️ Health: <span id="health">100</span><br>
+  🔫 <span id="weapon">Starter Blaster</span>
 </div>
+<div id="crosshair"></div>
+<div id="help">WASD / arrows: Move · Mouse: Aim · Click: Fire · ESC: Menu</div>
 
-<div id="help">
-  Move: WASD or arrow keys · Collect glowing orbs · Avoid red bots
-</div>
-
-<div id="message">
-  <div id="panel">
-    <h1 id="heading">CUBE CLASH 3D</h1>
-    <p id="description">
-      Enter the arena, collect glowing energy orbs,
-      and dodge the red bots. How many points can you score in 60 seconds?
+<div id="menu">
+  <div class="panel">
+    <h1 id="title">NERF BLASTER ARENA</h1>
+    <p class="subtitle" id="description">
+      Enter the arena, blast the enemy bots with foam darts,
+      collect coins, and upgrade your equipment!
     </p>
-    <button id="start">PLAY NOW</button><br>
-    <button id="restart">PLAY AGAIN</button>
+    <div class="coins">🪙 <span id="menuCoins">0</span> Coins</div>
+
+    <h2>🛒 Upgrade Shop</h2>
+    <div class="shop">
+      <div class="item">
+        <h3>⚡ Speed Boots</h3>
+        <p id="speedInfo">Move faster to escape enemies.</p>
+        <button id="speedBuy">Upgrade · 30 coins</button>
+      </div>
+      <div class="item">
+        <h3>🔫 Rapid Blaster</h3>
+        <p>Fire foam darts more quickly.</p>
+        <button id="rapidBuy">Buy · 50 coins</button>
+      </div>
+      <div class="item">
+        <h3>💥 Power Blaster</h3>
+        <p>Stronger darts that deal more damage.</p>
+        <button id="powerBuy">Buy · 100 coins</button>
+      </div>
+      <div class="item">
+        <h3>🚀 Mega Blaster</h3>
+        <p>Powerful darts and rapid firing.</p>
+        <button id="megaBuy">Buy · 200 coins</button>
+      </div>
+    </div>
+
+    <p id="status">Your coins and upgrades are saved automatically.</p>
+    <button id="play">▶ PLAY GAME</button>
+    <p class="subtitle" style="font-size:12px">
+      Tip: Keep moving! Enemies become more dangerous as you play.
+    </p>
   </div>
 </div>
 
 <script type="module">
 import * as THREE from
-  "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";
+'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 
+// ---------- SAVE DATA ----------
+const SAVE_KEY = 'nerfBlasterArenaSaveV1';
+const defaults = {
+  coins: 0,
+  speedLevel: 0,
+  owned: ['starter'],
+  weapon: 'starter'
+};
+
+function loadSave() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!saved || typeof saved !== 'object') return {...defaults,owned:['starter']};
+    return {
+      coins: Math.max(0, Number(saved.coins) || 0),
+      speedLevel: Math.max(0, Math.min(5, Number(saved.speedLevel) || 0)),
+      owned: Array.isArray(saved.owned)
+        ? [...new Set(['starter', ...saved.owned.filter(x =>
+            ['rapid','power','mega'].includes(x))])]
+        : ['starter'],
+      weapon: ['starter','rapid','power','mega'].includes(saved.weapon)
+        ? saved.weapon : 'starter'
+    };
+  } catch {
+    return {...defaults,owned:['starter']};
+  }
+}
+
+let save = loadSave();
+function persist() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  } catch {
+    statusEl.textContent = 'Saving is unavailable in this browser.';
+  }
+}
+
+// ---------- SCENE ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x07111f);
-scene.fog = new THREE.Fog(0x07111f, 22, 48);
+scene.fog = new THREE.Fog(0x07111f, 25, 52);
 
 const camera = new THREE.PerspectiveCamera(
-  60, window.innerWidth / window.innerHeight, 0.1, 100
+  60, innerWidth / innerHeight, 0.1, 100
 );
-camera.position.set(0, 15, 18);
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 17, 20);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.25;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0x9bdcff, 0x172033, 2));
+scene.add(new THREE.HemisphereLight(0xadddff,0x172032,2));
 
-const sun = new THREE.DirectionalLight(0xffffff, 3);
-sun.position.set(-8, 16, 8);
+const sun = new THREE.DirectionalLight(0xffffff,3);
+sun.position.set(-9,18,8);
 sun.castShadow = true;
 scene.add(sun);
 
 const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(36, 36),
+  new THREE.PlaneGeometry(36,36),
   new THREE.MeshStandardMaterial({
-    color: 0x10263b, roughness: 0.8, metalness: 0.2
+    color:0x14283b,roughness:.85,metalness:.15
   })
 );
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
+floor.rotation.x=-Math.PI/2;
+floor.receiveShadow=true;
 scene.add(floor);
 
-// Glowing arena grid
-const grid = new THREE.GridHelper(36, 36, 0x1685a5, 0x20415b);
-grid.position.y = 0.025;
+const grid = new THREE.GridHelper(36,36,0x18b8dc,0x244761);
+grid.position.y=.025;
 scene.add(grid);
 
-// Arena walls
-const wallMaterial = new THREE.MeshStandardMaterial({
-  color: 0x167b9c, emissive: 0x06405d, metalness: 0.5
+const wallMat = new THREE.MeshStandardMaterial({
+  color:0x087c9e,emissive:0x04334c,metalness:.4
 });
-function wall(x, z, sx, sz) {
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(sx, 1.2, sz), wallMaterial
-  );
-  mesh.position.set(x, 0.6, z);
-  mesh.castShadow = true;
-  scene.add(mesh);
+function makeWall(x,z,sx,sz) {
+  const m=new THREE.Mesh(new THREE.BoxGeometry(sx,1.2,sz),wallMat);
+  m.position.set(x,.6,z);
+  m.castShadow=true;
+  scene.add(m);
 }
-wall(0, -18, 36, 0.5);
-wall(0, 18, 36, 0.5);
-wall(-18, 0, 0.5, 36);
-wall(18, 0, 0.5, 36);
+makeWall(0,-18,36,.5);
+makeWall(0,18,36,.5);
+makeWall(-18,0,.5,36);
+makeWall(18,0,.5,36);
 
-// Simple 3D characters
-function makeCharacter(color, glow) {
-  const group = new THREE.Group();
+// ---------- CHARACTERS ----------
+function makeCharacter(color,glow,isPlayer=false) {
+  const group=new THREE.Group();
 
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.9, 1.1, 0.75),
+  const body=new THREE.Mesh(
+    new THREE.BoxGeometry(.85,1.05,.7),
     new THREE.MeshStandardMaterial({
-      color, emissive: glow, emissiveIntensity: 0.6,
-      roughness: 0.35, metalness: 0.25
+      color,emissive:glow,emissiveIntensity:.65,
+      roughness:.35,metalness:.2
     })
   );
-  body.position.y = 0.75;
-  body.castShadow = true;
+  body.position.y=.72;
+  body.castShadow=true;
   group.add(body);
 
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.36, 20, 16),
+  const head=new THREE.Mesh(
+    new THREE.SphereGeometry(.32,18,14),
     new THREE.MeshStandardMaterial({
-      color: 0xe9f8ff, emissive: glow, emissiveIntensity: 0.25
+      color:isPlayer?0xdffaff:0xffdfe5,
+      emissive:glow,emissiveIntensity:.25
     })
   );
-  head.position.y = 1.55;
-  head.castShadow = true;
+  head.position.y=1.48;
   group.add(head);
 
-  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x07111f });
-  for (const x of [-0.13, 0.13]) {
-    const eye = new THREE.Mesh(
-      new THREE.SphereGeometry(0.055, 10, 8), eyeMaterial
+  const eyesMat=new THREE.MeshBasicMaterial({color:0x07111f});
+  for(const x of [-.12,.12]){
+    const eye=new THREE.Mesh(
+      new THREE.SphereGeometry(.05,8,8),eyesMat
     );
-    eye.position.set(x, 1.59, 0.31);
+    eye.position.set(x,1.5,.28);
     group.add(eye);
   }
 
+  if(isPlayer){
+    const blaster=new THREE.Group();
+    const main=new THREE.Mesh(
+      new THREE.BoxGeometry(.22,.22,.75),
+      new THREE.MeshStandardMaterial({
+        color:0x21baff,metalness:.45,roughness:.3
+      })
+    );
+    main.position.set(.5,.92,.25);
+    blaster.add(main);
+    const tip=new THREE.Mesh(
+      new THREE.CylinderGeometry(.09,.09,.18,12),
+      new THREE.MeshStandardMaterial({color:0x182c43})
+    );
+    tip.rotation.x=Math.PI/2;
+    tip.position.set(.5,.92,.68);
+    blaster.add(tip);
+    group.add(blaster);
+    group.userData.blaster=blaster;
+  }
   return group;
 }
 
-const player = makeCharacter(0x16cfff, 0x0088ff);
-player.position.set(0, 0, 0);
+const player=makeCharacter(0x12bfff,0x0077ff,true);
 scene.add(player);
 
-const keys = {};
-let bots = [];
-let orbs = [];
-let score = 0;
-let energy = 100;
-let seconds = 60;
-let running = false;
-let lastTime = 0;
-let spawnClock = 0;
-let invincible = 0;
+// ---------- GAME STATE ----------
+const weapons={
+  starter:{name:'Starter Blaster',damage:1,delay:.38,color:0x55eaff},
+  rapid:{name:'Rapid Blaster',damage:1,delay:.15,color:0x9cff6a},
+  power:{name:'Power Blaster',damage:3,delay:.45,color:0xffca53},
+  mega:{name:'Mega Blaster',damage:3,delay:.16,color:0xff63e6}
+};
 
-const scoreEl = document.getElementById("score");
-const energyEl = document.getElementById("energy");
-const timeEl = document.getElementById("time");
-const message = document.getElementById("message");
-const heading = document.getElementById("heading");
-const description = document.getElementById("description");
-const startButton = document.getElementById("start");
-const restartButton = document.getElementById("restart");
+let bots=[];
+let darts=[];
+let particles=[];
+let score=0;
+let health=100;
+let running=false;
+let gameTime=0;
+let fireCooldown=0;
+let spawnCooldown=0;
+let lastDamage=0;
+let kills=0;
+let round=0;
+const keys={};
 
-function randomPosition() {
-  return {
-    x: THREE.MathUtils.randFloat(-14, 14),
-    z: THREE.MathUtils.randFloat(-14, 14)
-  };
+const hud=document.getElementById('hud');
+const help=document.getElementById('help');
+const menu=document.getElementById('menu');
+const titleEl=document.getElementById('title');
+const descEl=document.getElementById('description');
+const menuCoins=document.getElementById('menuCoins');
+const statusEl=document.getElementById('status');
+const playBtn=document.getElementById('play');
+const crosshair=document.getElementById('crosshair');
+
+const scoreEl=document.getElementById('coins');
+const killsEl=document.getElementById('kills');
+const healthEl=document.getElementById('health');
+const weaponEl=document.getElementById('weapon');
+
+function currentWeapon(){
+  return weapons[save.weapon] || weapons.starter;
+}
+function updateHUD(){
+  scoreEl.textContent=save.coins;
+  menuCoins.textContent=save.coins;
+  killsEl.textContent=kills;
+  healthEl.textContent=Math.max(0,Math.ceil(health));
+  weaponEl.textContent=currentWeapon().name;
+  document.getElementById('speedInfo').textContent=
+    `Movement level ${save.speedLevel}/5.`;
+  updateShop();
+}
+function updateShop(){
+  const speedBtn=document.getElementById('speedBuy');
+  speedBtn.textContent=save.speedLevel>=5?'MAX LEVEL':
+    `Upgrade · ${30+save.speedLevel*30} coins`;
+  speedBtn.disabled=save.speedLevel>=5;
+
+  for(const id of ['rapid','power','mega']){
+    const btn=document.getElementById(id+'Buy');
+    const costs={rapid:50,power:100,mega:200};
+    if(save.owned.includes(id)){
+      btn.textContent=save.weapon===id?'EQUIPPED':'EQUIP';
+      btn.disabled=save.weapon===id;
+    }else{
+      btn.textContent=`Buy · ${costs[id]} coins`;
+      btn.disabled=false;
+    }
+  }
 }
 
-function spawnOrb() {
-  const p = randomPosition();
-  const orb = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.38, 1),
-    new THREE.MeshStandardMaterial({
-      color: 0x7dffcb,
-      emissive: 0x00ff88,
-      emissiveIntensity: 2
-    })
-  );
-  orb.position.set(p.x, 0.8, p.z);
-  orb.castShadow = true;
-  scene.add(orb);
-  orbs.push(orb);
+function clearObjects(list){
+  for(const o of list) scene.remove(o);
+  list.length=0;
+}
+function randomSpot(){
+  let x,z;
+  do{
+    x=THREE.MathUtils.randFloat(-14,14);
+    z=THREE.MathUtils.randFloat(-14,14);
+  }while(Math.hypot(x-player.position.x,z-player.position.z)<7);
+  return {x,z};
 }
 
-function spawnBot() {
-  const bot = makeCharacter(0xff425d, 0xff001e);
-  const p = randomPosition();
-  bot.position.set(p.x, 0, p.z);
+function spawnBot(){
+  const bot=makeCharacter(0xff365b,0xff001e);
+  const p=randomSpot();
+  bot.position.set(p.x,0,p.z);
+  bot.userData.hp=1+Math.floor(round/3);
+  bot.userData.speed=1.8+Math.min(round*.12,1.5);
+  bot.userData.hitFlash=0;
   scene.add(bot);
   bots.push(bot);
 }
 
-function updateHUD() {
-  scoreEl.textContent = score;
-  energyEl.textContent = Math.max(0, Math.ceil(energy));
-  timeEl.textContent = Math.max(0, Math.ceil(seconds));
+function spawnDart(direction){
+  const weapon=currentWeapon();
+  const dart=new THREE.Mesh(
+    new THREE.SphereGeometry(.14,10,8),
+    new THREE.MeshStandardMaterial({
+      color:weapon.color,emissive:weapon.color,emissiveIntensity:2
+    })
+  );
+  dart.position.set(player.position.x,.95,player.position.z);
+  dart.position.x+=direction.x*.7;
+  dart.position.z+=direction.z*.7;
+  dart.castShadow=true;
+  scene.add(dart);
+  darts.push({
+    mesh:dart,
+    velocity:new THREE.Vector3(direction.x*23,0,direction.z*23),
+    damage:weapon.damage,
+    life:1.6
+  });
+
+  // Little blaster kick
+  const blaster=player.userData.blaster;
+  blaster.position.z=-.12;
+  setTimeout(()=>{
+    if(blaster.parent) blaster.position.z=0;
+  },65);
 }
 
-function endGame(won) {
-  running = false;
-  message.style.display = "flex";
-  heading.textContent = won ? "TIME'S UP!" : "OUT OF ENERGY!";
-  description.textContent =
-    `You scored ${score} points! ${
-      score >= 100 ? "Amazing arena skills!" : "Try again and beat your score!"
-    }`;
-  startButton.style.display = "none";
-  restartButton.style.display = "inline-block";
+function burst(position,color){
+  const material=new THREE.MeshBasicMaterial({color});
+  for(let i=0;i<7;i++){
+    const mesh=new THREE.Mesh(
+      new THREE.SphereGeometry(.09,6,6),material
+    );
+    mesh.position.copy(position);
+    scene.add(mesh);
+    particles.push({
+      mesh,
+      velocity:new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(5),
+        Math.random()*4,
+        THREE.MathUtils.randFloatSpread(5)
+      ),
+      life:.4
+    });
+  }
 }
 
-function resetGame() {
-  for (const item of [...bots, ...orbs]) scene.remove(item);
-  bots = [];
-  orbs = [];
-
-  score = 0;
-  energy = 100;
-  seconds = 60;
-  spawnClock = 0;
-  invincible = 0;
-  player.position.set(0, 0, 0);
-
-  for (let i = 0; i < 4; i++) spawnBot();
-  for (let i = 0; i < 7; i++) spawnOrb();
-
+function removeBot(index){
+  const bot=bots[index];
+  burst(new THREE.Vector3(bot.position.x,.8,bot.position.z),0xff5577);
+  scene.remove(bot);
+  bots.splice(index,1);
+  save.coins+=10;
+  kills++;
+  persist();
   updateHUD();
-  message.style.display = "none";
-  running = true;
-  lastTime = performance.now();
 }
 
-startButton.addEventListener("click", resetGame);
-restartButton.addEventListener("click", resetGame);
+function shoot(){
+  if(!running||fireCooldown>0)return;
+  fireCooldown=currentWeapon().delay;
 
-window.addEventListener("keydown", e => {
-  keys[e.key.toLowerCase()] = true;
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "]
-      .includes(e.key)) e.preventDefault();
+  const rect=renderer.domElement.getBoundingClientRect();
+  mouse.x=(pointerX-rect.left)/rect.width*2-1;
+  mouse.y=-((pointerY-rect.top)/rect.height)*2+1;
+
+  raycaster.setFromCamera(mouse,camera);
+  const point=raycaster.ray.intersectPlane(groundPlane,new THREE.Vector3());
+  if(!point)return;
+
+  let dx=point.x-player.position.x;
+  let dz=point.z-player.position.z;
+  const len=Math.hypot(dx,dz);
+  if(len<.1)return;
+  dx/=len;dz/=len;
+
+  player.rotation.y=Math.atan2(dx,dz);
+  spawnDart({x:dx,z:dz});
+}
+
+// ---------- MOVEMENT AND AIM ----------
+const raycaster=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+const groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+let pointerX=innerWidth/2;
+let pointerY=innerHeight/2;
+let mouseDown=false;
+
+renderer.domElement.addEventListener('pointermove',e=>{
+  pointerX=e.clientX;
+  pointerY=e.clientY;
+  crosshair.style.left=pointerX+'px';
+  crosshair.style.top=pointerY+'px';
 });
-window.addEventListener("keyup", e => {
-  keys[e.key.toLowerCase()] = false;
+
+renderer.domElement.addEventListener('pointerdown',e=>{
+  if(e.button===0){
+    mouseDown=true;
+    shoot();
+  }
 });
-window.addEventListener("blur", () => {
-  for (const k in keys) keys[k] = false;
+window.addEventListener('pointerup',()=>mouseDown=false);
+
+window.addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)){
+    e.preventDefault();
+  }
+  if(e.key==='Escape'&&running) endGame('menu');
+});
+window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+window.addEventListener('blur',()=>{
+  mouseDown=false;
+  for(const k in keys)keys[k]=false;
 });
 
-const clock = new THREE.Clock();
+// ---------- SHOP ----------
+function buySpeed(){
+  const cost=30+save.speedLevel*30;
+  if(save.speedLevel>=5)return;
+  if(save.coins<cost){
+    statusEl.textContent='Not enough coins! Defeat enemies to earn more.';
+    return;
+  }
+  save.coins-=cost;
+  save.speedLevel++;
+  persist();
+  statusEl.textContent='Speed upgraded!';
+  updateHUD();
+}
+document.getElementById('speedBuy').onclick=buySpeed;
 
-function animate() {
-  requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
-
-  if (running) {
-    seconds -= dt;
-    invincible = Math.max(0, invincible - dt);
-
-    if (seconds <= 0) {
-      seconds = 0;
-      updateHUD();
-      endGame(true);
+for(const id of ['rapid','power','mega']){
+  document.getElementById(id+'Buy').onclick=()=>{
+    const costs={rapid:50,power:100,mega:200};
+    if(save.owned.includes(id)){
+      save.weapon=id;
+      statusEl.textContent=weapons[id].name+' equipped!';
+    }else{
+      if(save.coins<costs[id]){
+        statusEl.textContent='Not enough coins! Defeat more enemies.';
+        return;
+      }
+      save.coins-=costs[id];
+      save.owned.push(id);
+      save.weapon=id;
+      statusEl.textContent=weapons[id].name+' purchased and equipped!';
     }
+    persist();
+    updateHUD();
+  };
+}
+
+// ---------- MENU AND ROUNDS ----------
+function showMenu(gameOver=false){
+  running=false;
+  menu.style.display='flex';
+  hud.style.display='none';
+  help.style.display='none';
+  crosshair.style.display='none';
+  renderer.domElement.style.cursor='default';
+  mouseDown=false;
+  for(const k in keys)keys[k]=false;
+
+  if(gameOver){
+    titleEl.textContent='YOU GOT CAUGHT!';
+    descEl.textContent=
+      `You defeated ${kills} enemies and earned coins. Buy upgrades and try again!`;
+    playBtn.textContent='▶ TRY AGAIN';
+  }else{
+    titleEl.textContent='NERF BLASTER ARENA';
+    descEl.textContent=
+      'Blast the enemy bots, earn 10 coins per enemy, and upgrade your blaster!';
+    playBtn.textContent='▶ PLAY GAME';
+  }
+  statusEl.textContent='Coins and upgrades are saved automatically.';
+  updateHUD();
+}
+
+function startGame(){
+  clearObjects(bots);
+  clearObjects(darts);
+  for(const p of particles)scene.remove(p.mesh);
+  particles=[];
+  score=0;
+  kills=0;
+  health=100;
+  gameTime=0;
+  fireCooldown=0;
+  spawnCooldown=0;
+  lastDamage=0;
+  round=0;
+
+  player.position.set(0,0,0);
+  player.visible=true;
+  for(let i=0;i<4;i++)spawnBot();
+
+  menu.style.display='none';
+  hud.style.display='block';
+  help.style.display='block';
+  crosshair.style.display='block';
+  renderer.domElement.style.cursor='none';
+  pointerX=innerWidth/2;
+  pointerY=innerHeight/2;
+  crosshair.style.left=pointerX+'px';
+  crosshair.style.top=pointerY+'px';
+
+  running=true;
+  updateHUD();
+}
+
+function endGame(reason){
+  if(!running)return;
+  running=false;
+  if(reason==='menu'){
+    showMenu(false);
+  }else{
+    showMenu(true);
+  }
+}
+
+playBtn.addEventListener('click',startGame);
+
+// ---------- MAIN LOOP ----------
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.04);
+  fireCooldown=Math.max(0,fireCooldown-dt);
+
+  if(running){
+    gameTime+=dt;
+
+    // Hold mouse to keep firing
+    if(mouseDown)shoot();
 
     // Player movement
-    let dx = 0, dz = 0;
-    if (keys["w"] || keys["arrowup"]) dz -= 1;
-    if (keys["s"] || keys["arrowdown"]) dz += 1;
-    if (keys["a"] || keys["arrowleft"]) dx -= 1;
-    if (keys["d"] || keys["arrowright"]) dx += 1;
+    let dx=0,dz=0;
+    if(keys.w||keys.arrowup)dz-=1;
+    if(keys.s||keys.arrowdown)dz+=1;
+    if(keys.a||keys.arrowleft)dx-=1;
+    if(keys.d||keys.arrowright)dx+=1;
 
-    const length = Math.hypot(dx, dz);
-    if (length > 0) {
-      dx /= length;
-      dz /= length;
-      player.position.x += dx * 8 * dt;
-      player.position.z += dz * 8 * dt;
-      player.rotation.y = Math.atan2(dx, dz);
+    const length=Math.hypot(dx,dz);
+    if(length>0){
+      dx/=length;dz/=length;
+      const speed=5.5+save.speedLevel*1.15;
+      player.position.x+=dx*speed*dt;
+      player.position.z+=dz*speed*dt;
     }
 
-    player.position.x = THREE.MathUtils.clamp(
-      player.position.x, -16.2, 16.2
-    );
-    player.position.z = THREE.MathUtils.clamp(
-      player.position.z, -16.2, 16.2
-    );
+    player.position.x=THREE.MathUtils.clamp(player.position.x,-16.4,16.4);
+    player.position.z=THREE.MathUtils.clamp(player.position.z,-16.4,16.4);
 
-    // Bots follow the player. Touching them costs energy.
-    for (const bot of bots) {
-      const vx = player.position.x - bot.position.x;
-      const vz = player.position.z - bot.position.z;
-      const distance = Math.hypot(vx, vz) || 1;
+    // Enemies chase the player
+    for(let i=bots.length-1;i>=0;i--){
+      const bot=bots[i];
+      const vx=player.position.x-bot.position.x;
+      const vz=player.position.z-bot.position.z;
+      const distance=Math.hypot(vx,vz)||1;
 
-      bot.position.x += (vx / distance) * 2.0 * dt;
-      bot.position.z += (vz / distance) * 2.0 * dt;
-      bot.rotation.y = Math.atan2(vx, vz);
-      bot.position.y = Math.abs(Math.sin(performance.now() * 0.004)) * 0.08;
+      bot.position.x+=(vx/distance)*bot.userData.speed*dt;
+      bot.position.z+=(vz/distance)*bot.userData.speed*dt;
+      bot.rotation.y=Math.atan2(vx,vz);
+      bot.position.y=Math.abs(Math.sin(gameTime*5+i))*.05;
 
-      if (distance < 1.25 && invincible <= 0) {
-        energy -= 12;
-        invincible = 0.65;
-
-        // A small bounce makes room to escape.
-        player.position.x += (player.position.x - bot.position.x) / distance;
-        player.position.z += (player.position.z - bot.position.z) / distance;
-
-        if (energy <= 0) {
-          energy = 0;
+      if(distance<1.05&&gameTime-lastDamage>.65){
+        health-=15;
+        lastDamage=gameTime;
+        burst(new THREE.Vector3(player.position.x,.8,player.position.z),0xff3344);
+        if(health<=0){
+          health=0;
           updateHUD();
-          endGame(false);
+          endGame('caught');
+          break;
         }
       }
     }
 
-    // Collect the glowing orbs
-    for (let i = orbs.length - 1; i >= 0; i--) {
-      const orb = orbs[i];
-      orb.rotation.y += dt * 2;
-      orb.position.y = 0.8 + Math.sin(performance.now() * 0.003 + i) * 0.15;
+    // Foam darts travel and hit enemies
+    for(let i=darts.length-1;i>=0;i--){
+      const dart=darts[i];
+      dart.mesh.position.addScaledVector(dart.velocity,dt);
+      dart.life-=dt;
+      let hit=false;
 
-      const distance = Math.hypot(
-        player.position.x - orb.position.x,
-        player.position.z - orb.position.z
-      );
+      for(let j=bots.length-1;j>=0;j--){
+        const bot=bots[j];
+        const distance=Math.hypot(
+          dart.mesh.position.x-bot.position.x,
+          dart.mesh.position.z-bot.position.z
+        );
+        if(distance<.72){
+          bot.userData.hp-=dart.damage;
+          burst(dart.mesh.position.clone(),currentWeapon().color);
+          hit=true;
+          if(bot.userData.hp<=0)removeBot(j);
+          break;
+        }
+      }
 
-      if (distance < 1.15) {
-        scene.remove(orb);
-        orbs.splice(i, 1);
-        score += 10;
-        spawnOrb();
+      if(hit||dart.life<=0||
+        Math.abs(dart.mesh.position.x)>19||
+        Math.abs(dart.mesh.position.z)>19){
+        scene.remove(dart.mesh);
+        darts.splice(i,1);
       }
     }
 
-    // Gradually increase the challenge
-    spawnClock += dt;
-    if (spawnClock > 10 && bots.length < 9) {
-      spawnClock = 0;
+    // New enemies arrive as the round continues
+    spawnCooldown+=dt;
+    if(spawnCooldown>8&&bots.length<12){
+      spawnCooldown=0;
+      round++;
       spawnBot();
     }
-
     updateHUD();
   }
 
-  // Smooth third-person camera
-  const target = new THREE.Vector3(
-    player.position.x,
-    0,
-    player.position.z
-  );
-  camera.position.lerp(
-    new THREE.Vector3(target.x, 15, target.z + 18), 0.06
-  );
-  camera.lookAt(target.x, 0, target.z);
-
-  // Flash player briefly after a collision
-  if (invincible > 0) {
-    player.visible = Math.floor(performance.now() / 90) % 2 === 0;
-  } else {
-    player.visible = true;
+  // Animate particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.mesh.position.addScaledVector(p.velocity,dt);
+    p.life-=dt;
+    if(p.life<=0){
+      scene.remove(p.mesh);
+      particles.splice(i,1);
+    }
   }
 
-  renderer.render(scene, camera);
+  // Smooth third-person camera
+  const targetX=player.position.x;
+  const targetZ=player.position.z;
+  camera.position.lerp(
+    new THREE.Vector3(targetX,16,targetZ+19),.07
+  );
+  camera.lookAt(targetX,0,targetZ);
+
+  renderer.render(scene,camera);
 }
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
 });
 
+updateHUD();
+showMenu(false);
 animate();
 </script>
 </body>
