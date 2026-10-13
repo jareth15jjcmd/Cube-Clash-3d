@@ -339,7 +339,7 @@ function updateShop(){
 }
 
 function clearObjects(list){
-  for(const o of list) scene.remove(o);
+  for(const o of list) scene.remove(o.mesh || o);
   list.length=0;
 }
 function randomSpot(){
@@ -488,6 +488,12 @@ renderer.domElement.addEventListener('pointerdown',e=>{
   shoot();
 });
 window.addEventListener('pointerup',()=>mouseDown=false);
+document.addEventListener('pointerlockchange',()=>{
+  if(running && document.pointerLockElement!==renderer.domElement){
+    mouseDown=false;
+    endGame('menu');
+  }
+});
 
 window.addEventListener('keydown',e=>{
   keys[e.key.toLowerCase()]=true;
