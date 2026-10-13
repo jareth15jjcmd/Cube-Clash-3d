@@ -13,7 +13,8 @@ button:hover{filter:brightness(1.18)}
 button:disabled{opacity:.4;cursor:not-allowed}
 #hud{position:fixed;top:12px;left:12px;z-index:3;background:#07111fe8;padding:13px 17px;border:1px solid #31516e;border-radius:12px;line-height:1.8;display:none}
 #hud strong{color:#50eaff}
-#crosshair{position:fixed;z-index:2;pointer-events:none;width:20px;height:20px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);display:none;box-shadow:0 0 7px #00d9ff}
+#crosshair{position:fixed;z-index:6;pointer-events:none;width:20px;height:20px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);display:none;box-shadow:0 0 7px #00d9ff;left:50%;top:50%}
+#waveBanner{position:fixed;z-index:4;top:23%;left:50%;transform:translateX(-50%);font-size:clamp(28px,5vw,48px);font-weight:900;color:#72edff;text-shadow:0 0 18px #00bfff;text-align:center;pointer-events:none;display:none}
 #menu{position:fixed;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:linear-gradient(#07111fdc,#07111ff5);overflow:auto;padding:15px}
 .panel{width:min(570px,100%);max-height:96vh;overflow-y:auto;background:#10243a;border:1px solid #2b7398;border-radius:22px;padding:24px;box-shadow:0 0 45px #00bfff1a;text-align:center}
 h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
@@ -33,14 +34,17 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
 <body>
 
 <div id="hud">
-  <strong>NERF BLASTER ARENA</strong><br>
+  <strong>NERF BLASTER ARENA FPS</strong><br>
+  🌊 Wave: <span id="wave">1</span><br>
+  🤖 Enemies left: <span id="remaining">0</span><br>
   🪙 Coins: <span id="coins">0</span><br>
   🎯 Defeated: <span id="kills">0</span><br>
   ❤️ Health: <span id="health">100</span><br>
   🔫 <span id="weapon">Starter Blaster</span>
 </div>
 <div id="crosshair"></div>
-<div id="help">WASD / arrows: Move · Mouse: Aim · Click: Fire · ESC: Menu</div>
+<div id="waveBanner"></div>
+<div id="help">WASD: Move · Mouse: Aim · Left-click: Fire · ESC: Menu</div>
 
 <div id="menu">
   <div class="panel">
@@ -132,7 +136,9 @@ scene.fog = new THREE.Fog(0x07111f, 25, 52);
 const camera = new THREE.PerspectiveCamera(
   60, innerWidth / innerHeight, 0.1, 100
 );
-camera.position.set(0, 17, 20);
+camera.position.set(0, 1.55, 0);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth, innerHeight);
@@ -237,6 +243,23 @@ function makeCharacter(color,glow,isPlayer=false) {
 
 const player=makeCharacter(0x12bfff,0x0077ff,true);
 scene.add(player);
+player.visible = false;
+
+// First-person blaster attached to the camera.
+const fpsGun = new THREE.Group();
+const gunBody = new THREE.Mesh(
+  new THREE.BoxGeometry(.24,.22,.72),
+  new THREE.MeshStandardMaterial({color:0x16cfff,metalness:.4,roughness:.3})
+);
+gunBody.position.set(.34,-.28,-.62);
+fpsGun.add(gunBody);
+const gunGrip = new THREE.Mesh(
+  new THREE.BoxGeometry(.14,.28,.18),
+  new THREE.MeshStandardMaterial({color:0x243c56})
+);
+gunGrip.position.set(.34,-.46,-.48);
+fpsGun.add(gunGrip);
+camera.add(fpsGun);
 
 // ---------- GAME STATE ----------
 const weapons={
@@ -254,10 +277,13 @@ let health=100;
 let running=false;
 let gameTime=0;
 let fireCooldown=0;
-let spawnCooldown=0;
-let lastDamage=0;
+let lastDamage=-10;
 let kills=0;
-let round=0;
+let wave=0;
+let wavePause=0;
+let waveMessageTime=0;
+let yaw=0;
+let pitch=0;
 const keys={};
 
 const hud=document.getElementById('hud');
@@ -274,6 +300,9 @@ const scoreEl=document.getElementById('coins');
 const killsEl=document.getElementById('kills');
 const healthEl=document.getElementById('health');
 const weaponEl=document.getElementById('weapon');
+const waveEl=document.getElementById('wave');
+const remainingEl=document.getElementById('remaining');
+const waveBanner=document.getElementById('waveBanner');
 
 function currentWeapon(){
   return weapons[save.weapon] || weapons.starter;
@@ -284,6 +313,8 @@ function updateHUD(){
   killsEl.textContent=kills;
   healthEl.textContent=Math.max(0,Math.ceil(health));
   weaponEl.textContent=currentWeapon().name;
+  waveEl.textContent=wave || 1;
+  remainingEl.textContent=bots.length;
   document.getElementById('speedInfo').textContent=
     `Movement level ${save.speedLevel}/5.`;
   updateShop();
@@ -324,11 +355,23 @@ function spawnBot(){
   const bot=makeCharacter(0xff365b,0xff001e);
   const p=randomSpot();
   bot.position.set(p.x,0,p.z);
-  bot.userData.hp=1+Math.floor(round/3);
-  bot.userData.speed=1.8+Math.min(round*.12,1.5);
-  bot.userData.hitFlash=0;
+  bot.userData.maxHp=1+Math.floor((wave-1)/2);
+  bot.userData.hp=bot.userData.maxHp;
+  bot.userData.speed=Math.min(5.5,1.8+(wave-1)*.25);
+  bot.userData.damage=Math.min(35,10+(wave-1)*2);
   scene.add(bot);
   bots.push(bot);
+}
+
+function startWave(){
+  wave++;
+  wavePause=0;
+  const count=Math.min(24,3+wave*2);
+  for(let i=0;i<count;i++) spawnBot();
+  waveBanner.textContent='WAVE '+wave;
+  waveBanner.style.display='block';
+  waveMessageTime=2;
+  updateHUD();
 }
 
 function spawnDart(direction){
@@ -393,23 +436,23 @@ function removeBot(index){
 function shoot(){
   if(!running||fireCooldown>0)return;
   fireCooldown=currentWeapon().delay;
-
-  const rect=renderer.domElement.getBoundingClientRect();
-  mouse.x=(pointerX-rect.left)/rect.width*2-1;
-  mouse.y=-((pointerY-rect.top)/rect.height)*2+1;
-
-  raycaster.setFromCamera(mouse,camera);
-  const point=raycaster.ray.intersectPlane(groundPlane,new THREE.Vector3());
-  if(!point)return;
-
-  let dx=point.x-player.position.x;
-  let dz=point.z-player.position.z;
-  const len=Math.hypot(dx,dz);
-  if(len<.1)return;
-  dx/=len;dz/=len;
-
-  player.rotation.y=Math.atan2(dx,dz);
-  spawnDart({x:dx,z:dz});
+  const direction=new THREE.Vector3();
+  camera.getWorldDirection(direction);
+  const weapon=currentWeapon();
+  const dart=new THREE.Mesh(
+    new THREE.SphereGeometry(.12,10,8),
+    new THREE.MeshStandardMaterial({
+      color:weapon.color,emissive:weapon.color,emissiveIntensity:2
+    })
+  );
+  dart.position.copy(camera.position).addScaledVector(direction,.8);
+  scene.add(dart);
+  darts.push({
+    mesh:dart,
+    velocity:direction.clone().multiplyScalar(26),
+    damage:weapon.damage,
+    life:1.8
+  });
 }
 
 // ---------- MOVEMENT AND AIM ----------
@@ -421,17 +464,28 @@ let pointerY=innerHeight/2;
 let mouseDown=false;
 
 renderer.domElement.addEventListener('pointermove',e=>{
-  pointerX=e.clientX;
-  pointerY=e.clientY;
-  crosshair.style.left=pointerX+'px';
-  crosshair.style.top=pointerY+'px';
+  if(document.pointerLockElement===renderer.domElement && running){
+    yaw-=e.movementX*.0025;
+    pitch-=e.movementY*.0025;
+    pitch=THREE.MathUtils.clamp(pitch,-1.15,1.15);
+    camera.rotation.order='YXZ';
+    camera.rotation.y=yaw;
+    camera.rotation.x=pitch;
+    crosshair.style.left='50%';
+    crosshair.style.top='50%';
+  }else{
+    pointerX=e.clientX;
+    pointerY=e.clientY;
+  }
 });
 
 renderer.domElement.addEventListener('pointerdown',e=>{
-  if(e.button===0){
-    mouseDown=true;
-    shoot();
+  if(e.button!==0||!running)return;
+  if(document.pointerLockElement!==renderer.domElement){
+    renderer.domElement.requestPointerLock?.();
   }
+  mouseDown=true;
+  shoot();
 });
 window.addEventListener('pointerup',()=>mouseDown=false);
 
@@ -488,6 +542,7 @@ for(const id of ['rapid','power','mega']){
 // ---------- MENU AND ROUNDS ----------
 function showMenu(gameOver=false){
   running=false;
+  if(document.pointerLockElement) document.exitPointerLock();
   menu.style.display='flex';
   hud.style.display='none';
   help.style.display='none';
@@ -526,8 +581,13 @@ function startGame(){
   round=0;
 
   player.position.set(0,0,0);
-  player.visible=true;
-  for(let i=0;i<4;i++)spawnBot();
+  player.visible=false;
+  wave=0;
+  wavePause=0;
+  yaw=0;
+  pitch=0;
+  camera.rotation.set(0,0,0);
+  startWave();
 
   menu.style.display='none';
   hud.style.display='block';
@@ -536,8 +596,8 @@ function startGame(){
   renderer.domElement.style.cursor='none';
   pointerX=innerWidth/2;
   pointerY=innerHeight/2;
-  crosshair.style.left=pointerX+'px';
-  crosshair.style.top=pointerY+'px';
+  crosshair.style.left='50%';
+  crosshair.style.top='50%';
 
   running=true;
   updateHUD();
@@ -568,23 +628,26 @@ function animate(){
     // Hold mouse to keep firing
     if(mouseDown)shoot();
 
-    // Player movement
-    let dx=0,dz=0;
-    if(keys.w||keys.arrowup)dz-=1;
-    if(keys.s||keys.arrowdown)dz+=1;
-    if(keys.a||keys.arrowleft)dx-=1;
-    if(keys.d||keys.arrowright)dx+=1;
-
-    const length=Math.hypot(dx,dz);
+    // Move relative to where the first-person camera is facing.
+    let forward=0,strafe=0;
+    if(keys.w||keys.arrowup)forward+=1;
+    if(keys.s||keys.arrowdown)forward-=1;
+    if(keys.a||keys.arrowleft)strafe-=1;
+    if(keys.d||keys.arrowright)strafe+=1;
+    const length=Math.hypot(forward,strafe);
     if(length>0){
-      dx/=length;dz/=length;
+      forward/=length;
+      strafe/=length;
       const speed=5.5+save.speedLevel*1.15;
-      player.position.x+=dx*speed*dt;
-      player.position.z+=dz*speed*dt;
+      player.position.x+=(-Math.sin(yaw)*forward+Math.cos(yaw)*strafe)*speed*dt;
+      player.position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed*dt;
     }
 
     player.position.x=THREE.MathUtils.clamp(player.position.x,-16.4,16.4);
     player.position.z=THREE.MathUtils.clamp(player.position.z,-16.4,16.4);
+    camera.position.set(player.position.x,1.55,player.position.z);
+    camera.rotation.order='YXZ';
+    camera.rotation.set(pitch,yaw,0);
 
     // Enemies chase the player
     for(let i=bots.length-1;i>=0;i--){
@@ -599,7 +662,7 @@ function animate(){
       bot.position.y=Math.abs(Math.sin(gameTime*5+i))*.05;
 
       if(distance<1.05&&gameTime-lastDamage>.65){
-        health-=15;
+        health-=bot.userData.damage;
         lastDamage=gameTime;
         burst(new THREE.Vector3(player.position.x,.8,player.position.z),0xff3344);
         if(health<=0){
@@ -622,9 +685,10 @@ function animate(){
         const bot=bots[j];
         const distance=Math.hypot(
           dart.mesh.position.x-bot.position.x,
-          dart.mesh.position.z-bot.position.z
+          dart.mesh.position.z-bot.position.z,
+          dart.mesh.position.y-.9
         );
-        if(distance<.72){
+        if(distance<.85){
           bot.userData.hp-=dart.damage;
           burst(dart.mesh.position.clone(),currentWeapon().color);
           hit=true;
@@ -641,12 +705,20 @@ function animate(){
       }
     }
 
-    // New enemies arrive as the round continues
-    spawnCooldown+=dt;
-    if(spawnCooldown>8&&bots.length<12){
-      spawnCooldown=0;
-      round++;
-      spawnBot();
+    // Clear every enemy to advance. Each new wave gets harder.
+    if(bots.length===0 && wavePause===0){
+      wavePause=2.2;
+      waveBanner.textContent='WAVE '+wave+' CLEARED!';
+      waveBanner.style.display='block';
+      waveMessageTime=2.2;
+    }
+    if(wavePause>0){
+      wavePause-=dt;
+      if(wavePause<=0 && running) startWave();
+    }
+    if(waveMessageTime>0){
+      waveMessageTime-=dt;
+      if(waveMessageTime<=0) waveBanner.style.display='none';
     }
     updateHUD();
   }
@@ -662,13 +734,15 @@ function animate(){
     }
   }
 
-  // Smooth third-person camera
-  const targetX=player.position.x;
-  const targetZ=player.position.z;
-  camera.position.lerp(
-    new THREE.Vector3(targetX,16,targetZ+19),.07
-  );
-  camera.lookAt(targetX,0,targetZ);
+  // First-person camera stays at eye height and follows mouse look.
+  if(running){
+    camera.position.set(player.position.x,1.55,player.position.z);
+    camera.rotation.order='YXZ';
+    camera.rotation.set(pitch,yaw,0);
+  }else{
+    camera.position.lerp(new THREE.Vector3(0,17,20),.04);
+    camera.lookAt(0,0,0);
+  }
 
   renderer.render(scene,camera);
 }
