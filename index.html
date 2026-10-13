@@ -1,1 +1,433 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cube Clash 3D</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #07111f;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+  #hud {
+    position: fixed;
+    z-index: 2;
+    top: 16px;
+    left: 16px;
+    padding: 14px 18px;
+    border: 1px solid #34506d;
+    border-radius: 14px;
+    background: #07111fe8;
+    line-height: 1.8;
+  }
+  #hud strong { color: #57eaff; }
+  #help {
+    position: fixed;
+    z-index: 2;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 94%;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: #07111fe8;
+    text-align: center;
+    font-size: 13px;
+  }
+  #message {
+    position: fixed;
+    z-index: 3;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #07111fa8;
+  }
+  #panel {
+    width: min(420px, 90%);
+    padding: 28px;
+    text-align: center;
+    border: 1px solid #3d7398;
+    border-radius: 20px;
+    background: #0d1d30;
+    box-shadow: 0 0 50px #00bfff25;
+  }
+  h1 { margin-top: 0; color: #57eaff; }
+  button {
+    padding: 12px 24px;
+    border: 0;
+    border-radius: 10px;
+    background: #16bce7;
+    color: #061321;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button:hover { background: #80efff; }
+  #restart { display: none; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <strong>⚡ CUBE CLASH 3D</strong><br>
+  Score: <span id="score">0</span><br>
+  Energy: <span id="energy">100</span>%<br>
+  Time: <span id="time">60</span>s
+</div>
+
+<div id="help">
+  Move: WASD or arrow keys · Collect glowing orbs · Avoid red bots
+</div>
+
+<div id="message">
+  <div id="panel">
+    <h1 id="heading">CUBE CLASH 3D</h1>
+    <p id="description">
+      Enter the arena, collect glowing energy orbs,
+      and dodge the red bots. How many points can you score in 60 seconds?
+    </p>
+    <button id="start">PLAY NOW</button><br>
+    <button id="restart">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from
+  "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07111f);
+scene.fog = new THREE.Fog(0x07111f, 22, 48);
+
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 100
+);
+camera.position.set(0, 15, 18);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x9bdcff, 0x172033, 2));
+
+const sun = new THREE.DirectionalLight(0xffffff, 3);
+sun.position.set(-8, 16, 8);
+sun.castShadow = true;
+scene.add(sun);
+
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(36, 36),
+  new THREE.MeshStandardMaterial({
+    color: 0x10263b, roughness: 0.8, metalness: 0.2
+  })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Glowing arena grid
+const grid = new THREE.GridHelper(36, 36, 0x1685a5, 0x20415b);
+grid.position.y = 0.025;
+scene.add(grid);
+
+// Arena walls
+const wallMaterial = new THREE.MeshStandardMaterial({
+  color: 0x167b9c, emissive: 0x06405d, metalness: 0.5
+});
+function wall(x, z, sx, sz) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(sx, 1.2, sz), wallMaterial
+  );
+  mesh.position.set(x, 0.6, z);
+  mesh.castShadow = true;
+  scene.add(mesh);
+}
+wall(0, -18, 36, 0.5);
+wall(0, 18, 36, 0.5);
+wall(-18, 0, 0.5, 36);
+wall(18, 0, 0.5, 36);
+
+// Simple 3D characters
+function makeCharacter(color, glow) {
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 1.1, 0.75),
+    new THREE.MeshStandardMaterial({
+      color, emissive: glow, emissiveIntensity: 0.6,
+      roughness: 0.35, metalness: 0.25
+    })
+  );
+  body.position.y = 0.75;
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 20, 16),
+    new THREE.MeshStandardMaterial({
+      color: 0xe9f8ff, emissive: glow, emissiveIntensity: 0.25
+    })
+  );
+  head.position.y = 1.55;
+  head.castShadow = true;
+  group.add(head);
+
+  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x07111f });
+  for (const x of [-0.13, 0.13]) {
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 10, 8), eyeMaterial
+    );
+    eye.position.set(x, 1.59, 0.31);
+    group.add(eye);
+  }
+
+  return group;
+}
+
+const player = makeCharacter(0x16cfff, 0x0088ff);
+player.position.set(0, 0, 0);
+scene.add(player);
+
+const keys = {};
+let bots = [];
+let orbs = [];
+let score = 0;
+let energy = 100;
+let seconds = 60;
+let running = false;
+let lastTime = 0;
+let spawnClock = 0;
+let invincible = 0;
+
+const scoreEl = document.getElementById("score");
+const energyEl = document.getElementById("energy");
+const timeEl = document.getElementById("time");
+const message = document.getElementById("message");
+const heading = document.getElementById("heading");
+const description = document.getElementById("description");
+const startButton = document.getElementById("start");
+const restartButton = document.getElementById("restart");
+
+function randomPosition() {
+  return {
+    x: THREE.MathUtils.randFloat(-14, 14),
+    z: THREE.MathUtils.randFloat(-14, 14)
+  };
+}
+
+function spawnOrb() {
+  const p = randomPosition();
+  const orb = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.38, 1),
+    new THREE.MeshStandardMaterial({
+      color: 0x7dffcb,
+      emissive: 0x00ff88,
+      emissiveIntensity: 2
+    })
+  );
+  orb.position.set(p.x, 0.8, p.z);
+  orb.castShadow = true;
+  scene.add(orb);
+  orbs.push(orb);
+}
+
+function spawnBot() {
+  const bot = makeCharacter(0xff425d, 0xff001e);
+  const p = randomPosition();
+  bot.position.set(p.x, 0, p.z);
+  scene.add(bot);
+  bots.push(bot);
+}
+
+function updateHUD() {
+  scoreEl.textContent = score;
+  energyEl.textContent = Math.max(0, Math.ceil(energy));
+  timeEl.textContent = Math.max(0, Math.ceil(seconds));
+}
+
+function endGame(won) {
+  running = false;
+  message.style.display = "flex";
+  heading.textContent = won ? "TIME'S UP!" : "OUT OF ENERGY!";
+  description.textContent =
+    `You scored ${score} points! ${
+      score >= 100 ? "Amazing arena skills!" : "Try again and beat your score!"
+    }`;
+  startButton.style.display = "none";
+  restartButton.style.display = "inline-block";
+}
+
+function resetGame() {
+  for (const item of [...bots, ...orbs]) scene.remove(item);
+  bots = [];
+  orbs = [];
+
+  score = 0;
+  energy = 100;
+  seconds = 60;
+  spawnClock = 0;
+  invincible = 0;
+  player.position.set(0, 0, 0);
+
+  for (let i = 0; i < 4; i++) spawnBot();
+  for (let i = 0; i < 7; i++) spawnOrb();
+
+  updateHUD();
+  message.style.display = "none";
+  running = true;
+  lastTime = performance.now();
+}
+
+startButton.addEventListener("click", resetGame);
+restartButton.addEventListener("click", resetGame);
+
+window.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "]
+      .includes(e.key)) e.preventDefault();
+});
+window.addEventListener("keyup", e => {
+  keys[e.key.toLowerCase()] = false;
+});
+window.addEventListener("blur", () => {
+  for (const k in keys) keys[k] = false;
+});
+
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (running) {
+    seconds -= dt;
+    invincible = Math.max(0, invincible - dt);
+
+    if (seconds <= 0) {
+      seconds = 0;
+      updateHUD();
+      endGame(true);
+    }
+
+    // Player movement
+    let dx = 0, dz = 0;
+    if (keys["w"] || keys["arrowup"]) dz -= 1;
+    if (keys["s"] || keys["arrowdown"]) dz += 1;
+    if (keys["a"] || keys["arrowleft"]) dx -= 1;
+    if (keys["d"] || keys["arrowright"]) dx += 1;
+
+    const length = Math.hypot(dx, dz);
+    if (length > 0) {
+      dx /= length;
+      dz /= length;
+      player.position.x += dx * 8 * dt;
+      player.position.z += dz * 8 * dt;
+      player.rotation.y = Math.atan2(dx, dz);
+    }
+
+    player.position.x = THREE.MathUtils.clamp(
+      player.position.x, -16.2, 16.2
+    );
+    player.position.z = THREE.MathUtils.clamp(
+      player.position.z, -16.2, 16.2
+    );
+
+    // Bots follow the player. Touching them costs energy.
+    for (const bot of bots) {
+      const vx = player.position.x - bot.position.x;
+      const vz = player.position.z - bot.position.z;
+      const distance = Math.hypot(vx, vz) || 1;
+
+      bot.position.x += (vx / distance) * 2.0 * dt;
+      bot.position.z += (vz / distance) * 2.0 * dt;
+      bot.rotation.y = Math.atan2(vx, vz);
+      bot.position.y = Math.abs(Math.sin(performance.now() * 0.004)) * 0.08;
+
+      if (distance < 1.25 && invincible <= 0) {
+        energy -= 12;
+        invincible = 0.65;
+
+        // A small bounce makes room to escape.
+        player.position.x += (player.position.x - bot.position.x) / distance;
+        player.position.z += (player.position.z - bot.position.z) / distance;
+
+        if (energy <= 0) {
+          energy = 0;
+          updateHUD();
+          endGame(false);
+        }
+      }
+    }
+
+    // Collect the glowing orbs
+    for (let i = orbs.length - 1; i >= 0; i--) {
+      const orb = orbs[i];
+      orb.rotation.y += dt * 2;
+      orb.position.y = 0.8 + Math.sin(performance.now() * 0.003 + i) * 0.15;
+
+      const distance = Math.hypot(
+        player.position.x - orb.position.x,
+        player.position.z - orb.position.z
+      );
+
+      if (distance < 1.15) {
+        scene.remove(orb);
+        orbs.splice(i, 1);
+        score += 10;
+        spawnOrb();
+      }
+    }
+
+    // Gradually increase the challenge
+    spawnClock += dt;
+    if (spawnClock > 10 && bots.length < 9) {
+      spawnClock = 0;
+      spawnBot();
+    }
+
+    updateHUD();
+  }
+
+  // Smooth third-person camera
+  const target = new THREE.Vector3(
+    player.position.x,
+    0,
+    player.position.z
+  );
+  camera.position.lerp(
+    new THREE.Vector3(target.x, 15, target.z + 18), 0.06
+  );
+  camera.lookAt(target.x, 0, target.z);
+
+  // Flash player briefly after a collision
+  if (invincible > 0) {
+    player.visible = Math.floor(performance.now() / 90) % 2 === 0;
+  } else {
+    player.visible = true;
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
