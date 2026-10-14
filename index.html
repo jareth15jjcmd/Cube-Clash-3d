@@ -40,7 +40,9 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
   🪙 Coins: <span id="coins">0</span><br>
   🎯 Defeated: <span id="kills">0</span><br>
   ❤️ Health: <span id="health">100</span><br>
-  🔫 <span id="weapon">Starter Blaster</span>
+  🔫 <span id="weapon">Starter Blaster</span><br>
+  🗺️ Map: <span id="mapName">Neon Grid</span><br>
+  ⭐ Career XP: <span id="careerXP">0</span>
 </div>
 <div id="crosshair"></div>
 <div id="waveBanner"></div>
@@ -77,6 +79,11 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
         <p>Powerful darts and rapid firing.</p>
         <button id="megaBuy">Buy · 200 coins</button>
       </div>
+      <div class="item">
+        <h3>🌟 Prism Cannon</h3>
+        <p>Legendary rainbow blaster. Heavy hits and fast shots.</p>
+        <button id="legendaryBuy">Unlock · 500 coins</button>
+      </div>
     </div>
 
     <p id="status">Your coins and upgrades are saved automatically.</p>
@@ -96,6 +103,8 @@ const SAVE_KEY = 'nerfBlasterArenaSaveV1';
 const defaults = {
   coins: 0,
   speedLevel: 0,
+  careerXP: 0,
+  bestWave: 0,
   owned: ['starter'],
   weapon: 'starter'
 };
@@ -107,11 +116,13 @@ function loadSave() {
     return {
       coins: Math.max(0, Number(saved.coins) || 0),
       speedLevel: Math.max(0, Math.min(5, Number(saved.speedLevel) || 0)),
+      careerXP: Math.max(0, Number(saved.careerXP) || 0),
+      bestWave: Math.max(0, Number(saved.bestWave) || 0),
       owned: Array.isArray(saved.owned)
         ? [...new Set(['starter', ...saved.owned.filter(x =>
-            ['rapid','power','mega'].includes(x))])]
+            ['rapid','power','mega','legendary'].includes(x))])]
         : ['starter'],
-      weapon: ['starter','rapid','power','mega'].includes(saved.weapon)
+      weapon: ['starter','rapid','power','mega','legendary'].includes(saved.weapon)
         ? saved.weapon : 'starter'
     };
   } catch {
@@ -169,6 +180,37 @@ scene.add(floor);
 const grid = new THREE.GridHelper(36,36,0x18b8dc,0x244761);
 grid.position.y=.025;
 scene.add(grid);
+
+// Three arena themes rotate every wave; wave 5, 10, 15... are boss rounds.
+const mapThemes=[
+  {name:'Neon Grid',floor:0x14283b,grid:0x18b8dc,wall:0x087c9e,background:0x07111f},
+  {name:'Lava Core',floor:0x38202a,grid:0xff623d,wall:0xa93632,background:0x19080d},
+  {name:'Arctic Base',floor:0x173447,grid:0x9ceeff,wall:0x4a9fbd,background:0x071b2c}
+];
+let mapProps=[];
+function setMapForWave(w){
+  for(const prop of mapProps)scene.remove(prop);
+  mapProps=[];
+  const theme=mapThemes[(w-1)%mapThemes.length];
+  floor.material.color.setHex(theme.floor);
+  wallMat.color.setHex(theme.wall);
+  wallMat.emissive.setHex(theme.wall);
+  scene.background.setHex(theme.background);
+  scene.fog.color.setHex(theme.background);
+  if(Array.isArray(grid.material)){
+    grid.material[0].color.setHex(theme.grid);
+    grid.material[1].color.setHex(theme.grid);
+  }
+  document.getElementById('mapName').textContent=theme.name;
+  const propMat=new THREE.MeshStandardMaterial({color:theme.grid,emissive:theme.grid,emissiveIntensity:.22,metalness:.35});
+  const layout=w%3;
+  const spots=layout===0?[[-7,-5],[7,-5],[-7,5],[7,5]]:layout===1?[[-9,0],[9,0],[0,-9],[0,9]]:[[-10,-8],[10,-8],[-10,8],[10,8],[0,0]];
+  for(const [x,z] of spots){
+    const prop=new THREE.Mesh(new THREE.BoxGeometry(layout===2?2.5:1.5,layout===2?2.8:1.8,layout===2?2.5:1.5),propMat.clone());
+    prop.position.set(x,layout===2?1.4:.9,z); prop.castShadow=true; prop.receiveShadow=true;
+    scene.add(prop); mapProps.push(prop);
+  }
+}
 
 const wallMat = new THREE.MeshStandardMaterial({
   color:0x087c9e,emissive:0x04334c,metalness:.4
@@ -266,7 +308,8 @@ const weapons={
   starter:{name:'Starter Blaster',damage:1,delay:.38,color:0x55eaff},
   rapid:{name:'Rapid Blaster',damage:1,delay:.15,color:0x9cff6a},
   power:{name:'Power Blaster',damage:3,delay:.45,color:0xffca53},
-  mega:{name:'Mega Blaster',damage:3,delay:.16,color:0xff63e6}
+  mega:{name:'Mega Blaster',damage:3,delay:.16,color:0xff63e6},
+  legendary:{name:'Prism Cannon',damage:4,delay:.19,color:0xb68cff}
 };
 
 let bots=[];
@@ -282,6 +325,8 @@ let kills=0;
 let wave=0;
 let wavePause=0;
 let waveMessageTime=0;
+let spawnCooldown=0;
+let round=0;
 let yaw=0;
 let pitch=0;
 const keys={};
@@ -315,6 +360,7 @@ function updateHUD(){
   weaponEl.textContent=currentWeapon().name;
   waveEl.textContent=wave || 1;
   remainingEl.textContent=bots.length;
+  document.getElementById('careerXP').textContent=save.careerXP;
   document.getElementById('speedInfo').textContent=
     `Movement level ${save.speedLevel}/5.`;
   updateShop();
@@ -325,9 +371,9 @@ function updateShop(){
     `Upgrade · ${30+save.speedLevel*30} coins`;
   speedBtn.disabled=save.speedLevel>=5;
 
-  for(const id of ['rapid','power','mega']){
+  for(const id of ['rapid','power','mega','legendary']){
     const btn=document.getElementById(id+'Buy');
-    const costs={rapid:50,power:100,mega:200};
+    const costs={rapid:50,power:100,mega:200,legendary:500};
     if(save.owned.includes(id)){
       btn.textContent=save.weapon===id?'EQUIPPED':'EQUIP';
       btn.disabled=save.weapon===id;
@@ -351,14 +397,17 @@ function randomSpot(){
   return {x,z};
 }
 
-function spawnBot(){
-  const bot=makeCharacter(0xff365b,0xff001e);
+function spawnBot(isBoss=false){
+  const bot=makeCharacter(isBoss?0xffb52e:0xff365b,isBoss?0xff6a00:0xff001e);
   const p=randomSpot();
   bot.position.set(p.x,0,p.z);
-  bot.userData.maxHp=1+Math.floor((wave-1)/2);
+  bot.userData.isBoss=isBoss;
+  bot.userData.phase=1;
+  bot.userData.maxHp=(1+Math.floor((wave-1)/2))*(isBoss?24:1);
   bot.userData.hp=bot.userData.maxHp;
-  bot.userData.speed=Math.min(5.5,1.8+(wave-1)*.25);
-  bot.userData.damage=Math.min(35,10+(wave-1)*2);
+  bot.userData.speed=Math.min(5.5,1.8+(wave-1)*.25)*(isBoss?0.72:1);
+  bot.userData.damage=Math.min(35,10+(wave-1)*2)*(isBoss?1.6:1);
+  if(isBoss){bot.scale.set(2.2,2.2,2.2);bot.userData.speed*=1.25;}
   scene.add(bot);
   bots.push(bot);
 }
@@ -366,9 +415,12 @@ function spawnBot(){
 function startWave(){
   wave++;
   wavePause=0;
-  const count=Math.min(24,3+wave*2);
+  setMapForWave(wave);
+  const bossWave=wave%5===0;
+  const count=bossWave?Math.min(12,2+Math.floor(wave/2)):Math.min(24,3+wave*2);
+  if(bossWave) spawnBot(true);
   for(let i=0;i<count;i++) spawnBot();
-  waveBanner.textContent='WAVE '+wave;
+  waveBanner.textContent=bossWave?'BOSS WAVE '+wave:'WAVE '+wave;
   waveBanner.style.display='block';
   waveMessageTime=2;
   updateHUD();
@@ -427,7 +479,9 @@ function removeBot(index){
   burst(new THREE.Vector3(bot.position.x,.8,bot.position.z),0xff5577);
   scene.remove(bot);
   bots.splice(index,1);
-  save.coins+=10;
+  save.coins+=bot.userData.isBoss?150:10;
+  save.careerXP+=bot.userData.isBoss?100:10;
+  save.bestWave=Math.max(save.bestWave,wave);
   kills++;
   persist();
   updateHUD();
@@ -545,6 +599,18 @@ for(const id of ['rapid','power','mega']){
   };
 }
 
+document.getElementById('legendaryBuy').onclick=()=>{
+  if(save.owned.includes('legendary')){
+    save.weapon='legendary'; statusEl.textContent='Prism Cannon equipped!';
+  }else if(save.coins<500){
+    statusEl.textContent='You need 500 coins to unlock the Prism Cannon.'; return;
+  }else{
+    save.coins-=500; save.owned.push('legendary'); save.weapon='legendary';
+    statusEl.textContent='LEGENDARY PRISM CANNON UNLOCKED!';
+  }
+  persist(); updateHUD();
+};
+
 // ---------- MENU AND ROUNDS ----------
 function showMenu(gameOver=false){
   running=false;
@@ -644,7 +710,7 @@ function animate(){
     if(length>0){
       forward/=length;
       strafe/=length;
-      const speed=5.5+save.speedLevel*1.15;
+      const speed=6.2+save.speedLevel*1.15;
       player.position.x+=(-Math.sin(yaw)*forward+Math.cos(yaw)*strafe)*speed*dt;
       player.position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed*dt;
     }
@@ -661,6 +727,11 @@ function animate(){
       const vx=player.position.x-bot.position.x;
       const vz=player.position.z-bot.position.z;
       const distance=Math.hypot(vx,vz)||1;
+      if(bot.userData.isBoss && bot.userData.phase===1 && bot.userData.hp<=bot.userData.maxHp*.5){
+        bot.userData.phase=2; bot.userData.speed*=1.45; bot.userData.damage*=1.25;
+        bot.traverse(part=>{if(part.isMesh && part.material && part.material.color){part.material.color.set(0xff3b8d);if(part.material.emissive)part.material.emissive.set(0x9b003d);}});
+        waveBanner.textContent='BOSS PHASE 2!'; waveBanner.style.display='block'; waveMessageTime=2;
+      }
 
       bot.position.x+=(vx/distance)*bot.userData.speed*dt;
       bot.position.z+=(vz/distance)*bot.userData.speed*dt;
