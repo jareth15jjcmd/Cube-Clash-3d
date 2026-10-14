@@ -28,6 +28,9 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
 #play{width:100%;font-size:19px;padding:15px;margin-top:6px;background:#52e5ff}
 #status{color:#a9c8dd;font-size:13px;min-height:20px}
 #help{position:fixed;z-index:2;bottom:10px;left:50%;transform:translateX(-50%);width:max-content;max-width:95%;padding:9px 13px;background:#07111fe8;border-radius:10px;font-size:12px;text-align:center;display:none}
+#audioToggle{position:fixed;right:12px;bottom:56px;z-index:8;display:none;background:#10243a;color:#fff;border:1px solid #53e5ff;padding:9px 12px;font-size:12px}
+#musicBadge{position:fixed;right:12px;bottom:12px;z-index:7;background:#07111fe8;border:1px solid #31516e;border-radius:10px;padding:7px 10px;font-size:12px;color:#bfeeff;display:none}
+#status{overflow-wrap:anywhere}
 @media(max-width:420px){.shop{grid-template-columns:1fr}.panel{padding:17px}.item p{min-height:0}}
 </style>
 </head>
@@ -47,6 +50,8 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
 <div id="crosshair"></div>
 <div id="waveBanner"></div>
 <div id="help">WASD: Move · Mouse: Aim · Left-click: Fire · ESC: Menu</div>
+<button id="audioToggle" type="button" aria-pressed="true">🎵 Music: ON</button>
+<div id="musicBadge">♪ ARENA SOUNDTRACK</div>
 
 <div id="menu">
   <div class="panel">
@@ -94,9 +99,25 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
   </div>
 </div>
 
-<script type="module">
-import * as THREE from
-'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+<script>
+/* Boot guard: the Play button remains responsive while Three.js loads, and shows
+   a readable error if a school/network filter blocks the 3D engine. */
+window.__nerfReady = false;
+const earlyPlay = document.getElementById('play');
+const earlyStatus = document.getElementById('status');
+earlyPlay.addEventListener('click', () => {
+  if (!window.__nerfReady) earlyStatus.textContent = 'Loading the 3D engine… If this message stays here, the Three.js CDN may be blocked.';
+});
+(async function bootNerfArena(){
+let THREE;
+try {
+  THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
+} catch (error) {
+  earlyStatus.textContent = 'The 3D engine could not load. Check your internet connection or whether jsDelivr is blocked by your school network, then reload.';
+  console.error('Nerf Arena: Three.js failed to load', error);
+  return;
+}
+try {
 
 // ---------- SAVE DATA ----------
 const SAVE_KEY = 'nerfBlasterArenaSaveV1';
@@ -333,6 +354,52 @@ let wavePause=0;
 let waveMessageTime=0;
 let spawnCooldown=0;
 let round=0;
+let musicOn=true, audioContext=null, musicTimer=null, musicStep=0;
+function stopMusic(){
+  if(musicTimer!==null){clearInterval(musicTimer);musicTimer=null;}
+  if(audioContext){try{audioContext.suspend();}catch{}}
+}
+function startMusic(){
+  if(!musicOn || !running)return;
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    if(!audioContext)audioContext=new AudioCtx();
+    if(audioContext.state==='suspended')audioContext.resume();
+    if(musicTimer!==null)return;
+    const notes=[55,82.41,110,82.41,65.41,98,130.81,98,55,82.41,123.47,98,73.42,110,146.83,110];
+    musicTimer=setInterval(()=>{
+      if(!running||!musicOn){stopMusic();return;}
+      if(!audioContext||audioContext.state!=='running')return;
+      const now=audioContext.currentTime, base=notes[musicStep%notes.length];
+      const osc=audioContext.createOscillator(), gain=audioContext.createGain();
+      const filter=audioContext.createBiquadFilter();
+      osc.type='triangle'; osc.frequency.value=base*(musicStep%4===2?2:1);
+      filter.type='lowpass';filter.frequency.value=620;
+      gain.gain.setValueAtTime(.0001,now);
+      gain.gain.exponentialRampToValueAtTime(.035,now+.025);
+      gain.gain.exponentialRampToValueAtTime(.0001,now+.24);
+      osc.connect(filter);filter.connect(gain);gain.connect(audioContext.destination);
+      osc.start(now);osc.stop(now+.26);
+      if(musicStep%4===0){
+        const bass=audioContext.createOscillator(), bg=audioContext.createGain();
+        bass.type='sine';bass.frequency.value=base/2;
+        bg.gain.setValueAtTime(.0001,now);bg.gain.exponentialRampToValueAtTime(.055,now+.02);
+        bg.gain.exponentialRampToValueAtTime(.0001,now+.22);
+        bass.connect(bg);bg.connect(audioContext.destination);bass.start(now);bass.stop(now+.24);
+      }
+      musicStep++;
+    },280);
+  }catch(error){console.warn('Arena music unavailable',error);}
+}
+const audioToggle=document.getElementById('audioToggle');
+audioToggle.addEventListener('click',()=>{
+  musicOn=!musicOn;
+  audioToggle.textContent=musicOn?'🎵 Music: ON':'🔇 Music: OFF';
+  audioToggle.setAttribute('aria-pressed',String(musicOn));
+  if(musicOn&&running)startMusic();else stopMusic();
+});
+document.addEventListener('pointerdown',()=>{if(musicOn&&running)startMusic();});
 let yaw=0;
 let pitch=0;
 const keys={};
@@ -632,6 +699,9 @@ document.getElementById('legendaryBuy').onclick=()=>{
 // ---------- MENU AND ROUNDS ----------
 function showMenu(gameOver=false){
   running=false;
+  stopMusic();
+  audioToggle.style.display='none';
+  document.getElementById('musicBadge').style.display='none';
   if(document.pointerLockElement) document.exitPointerLock();
   menu.style.display='flex';
   hud.style.display='none';
@@ -690,7 +760,11 @@ function startGame(){
   crosshair.style.top='50%';
 
   running=true;
+  audioToggle.style.display='block';
+  document.getElementById('musicBadge').style.display='block';
   updateHUD();
+  startMusic();
+  window.__nerfReady=true;
 }
 
 function endGame(reason){
@@ -851,6 +925,13 @@ window.addEventListener('resize',()=>{
 updateHUD();
 showMenu(false);
 animate();
+window.__nerfReady=true;
+statusEl.textContent='Ready! Your coins and upgrades are saved automatically.';
+} catch(error) {
+  earlyStatus.textContent='The game encountered an error while starting. Open Chrome DevTools Console for details, then reload.';
+  console.error('Nerf Arena startup error',error);
+}
+})();
 </script>
 </body>
 </html>
