@@ -37,6 +37,14 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
 #audioToggle{position:fixed;right:12px;bottom:56px;z-index:8;display:none;background:#10243a;color:#fff;border:1px solid #53e5ff;padding:9px 12px;font-size:12px}
 #musicBadge{position:fixed;right:12px;bottom:12px;z-index:7;background:#07111fe8;border:1px solid #31516e;border-radius:10px;padding:7px 10px;font-size:12px;color:#bfeeff;display:none}
 #status{overflow-wrap:anywhere}
+#progressPanel{margin:12px 0;padding:14px;border:1px solid #36516c;border-radius:12px;background:#0a192b;text-align:left}
+#xpTrack{height:9px;background:#20384f;border-radius:99px;overflow:hidden;margin:7px 0}
+#xpFill{height:100%;width:0;background:linear-gradient(90deg,#35d9ff,#9cff6a);transition:width .2s}
+#achievementList{font-size:12px;line-height:1.6;color:#bed4e7;margin:8px 0}
+.settingsRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0;color:#bed4e7;font-size:13px}
+.settingsRow input[type=range]{width:48%}
+#sfxToggle{position:fixed;right:12px;bottom:100px;z-index:8;display:none;background:#10243a;color:#fff;border:1px solid #53e5ff;padding:9px 12px;font-size:12px}
+#levelHud{color:#9cff6a}
 @media(max-width:420px){.shop{grid-template-columns:1fr}.panel{padding:17px}.item p{min-height:0}}
 </style>
 </head>
@@ -51,13 +59,15 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
   ❤️ Health: <span id="health">100</span><br>
   🔫 <span id="weapon">Starter Blaster</span><br>
   🗺️ Map: <span id="mapName">Neon Grid</span><br>
-  ⭐ Career XP: <span id="careerXP">0</span>
+  ⭐ Career XP: <span id="careerXP">0</span><br>
+  <span id="levelHud">🏅 Level 1</span>
 </div>
 <div id="crosshair"></div>
 <div id="waveBanner"></div>
 <div id="help">WASD: Move · Mouse: Aim · Left-click: Fire · ESC: Menu</div>
 <button id="audioToggle" type="button" aria-pressed="true">🎵 Music: ON</button>
 <div id="musicBadge">♪ ARENA SOUNDTRACK</div>
+<button id="sfxToggle" type="button" aria-pressed="true">🔊 Effects: ON</button>
 
 <div id="menu">
   <div class="panel">
@@ -67,6 +77,16 @@ h1{margin:0 0 8px;font-size:clamp(28px,6vw,43px);color:#53e5ff}
       collect coins, and upgrade your equipment!
     </p>
     <div class="coins">🪙 <span id="menuCoins">0</span> Coins</div>
+    <div id="progressPanel">
+      <strong>🏅 Career Level <span id="careerLevel">1</span></strong>
+      <div id="xpTrack"><div id="xpFill"></div></div>
+      <div style="font-size:12px;color:#bed4e7"><span id="xpProgress">0 / 100 XP</span> · Best wave: <span id="bestWave">0</span></div>
+      <div style="margin-top:10px"><strong>🏆 Achievements</strong></div>
+      <div id="achievementList">No achievements yet. Start your first run!</div>
+      <div style="border-top:1px solid #36516c;margin-top:10px;padding-top:8px"><strong>⚙️ Controls & Audio</strong></div>
+      <label class="settingsRow">Mouse sensitivity <input id="sensitivity" type="range" min="0.001" max="0.006" step="0.0005" value="0.0025"><span id="sensitivityValue">0.0025</span></label>
+      <label class="settingsRow">Sprint with Shift <input id="sprintSetting" type="checkbox" checked></label>
+    </div>
 
     <h2>🛒 Upgrade Shop</h2>
     <div class="shop">
@@ -142,6 +162,9 @@ const defaults = {
   speedLevel: 0,
   careerXP: 0,
   bestWave: 0,
+  achievements: [],
+  mouseSensitivity: 0.0025,
+  sprintEnabled: true,
   owned: ['starter'],
   weapon: 'starter'
 };
@@ -155,6 +178,9 @@ function loadSave() {
       speedLevel: Math.max(0, Math.min(5, Number(saved.speedLevel) || 0)),
       careerXP: Math.max(0, Number(saved.careerXP) || 0),
       bestWave: Math.max(0, Number(saved.bestWave) || 0),
+      achievements: Array.isArray(saved.achievements) ? [...new Set(saved.achievements.filter(x => ['first-blast','marksman-25','veteran-100','wave-5','boss-breaker','level-5'].includes(x)))] : [],
+      mouseSensitivity: Number.isFinite(Number(saved.mouseSensitivity)) ? Math.max(0.001, Math.min(0.006, Number(saved.mouseSensitivity))) : 0.0025,
+      sprintEnabled: saved.sprintEnabled !== false,
       owned: Array.isArray(saved.owned)
         ? [...new Set(['starter', ...saved.owned.filter(x =>
             ['rapid','power','mega','legendary'].includes(x))])]
@@ -493,6 +519,24 @@ let waveMessageTime=0;
 let spawnCooldown=0;
 let round=0;
 let musicOn=true, audioContext=null, musicTimer=null, musicStep=0;
+let sfxOn=true;
+function playSfx(kind='shot'){
+  if(!sfxOn)return;
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    if(!audioContext)audioContext=new AudioCtx();
+    if(audioContext.state==='suspended')audioContext.resume();
+    const now=audioContext.currentTime;
+    const cfg=kind==='hit'?{freq:620,end:260,duration:.075,type:'triangle',volume:.045}:kind==='boom'?{freq:115,end:45,duration:.24,type:'sawtooth',volume:.07}:kind==='level'?{freq:440,end:880,duration:.22,type:'sine',volume:.055}:{freq:330,end:180,duration:.07,type:'square',volume:.025};
+    const osc=audioContext.createOscillator(), gain=audioContext.createGain();
+    osc.type=cfg.type;osc.frequency.setValueAtTime(cfg.freq,now);osc.frequency.exponentialRampToValueAtTime(Math.max(1,cfg.end),now+cfg.duration);
+    gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(cfg.volume,now+.012);gain.gain.exponentialRampToValueAtTime(.0001,now+cfg.duration);
+    osc.connect(gain);gain.connect(audioContext.destination);osc.start(now);osc.stop(now+cfg.duration+.01);
+  }catch(error){console.warn('Arena sound effect unavailable',error);}
+}
+const sfxToggle=document.getElementById('sfxToggle');
+sfxToggle.addEventListener('click',()=>{sfxOn=!sfxOn;sfxToggle.textContent=sfxOn?'🔊 Effects: ON':'🔇 Effects: OFF';sfxToggle.setAttribute('aria-pressed',String(sfxOn));});
 function stopMusic(){
   if(musicTimer!==null){clearInterval(musicTimer);musicTimer=null;}
   if(audioContext){try{audioContext.suspend();}catch{}}
@@ -559,6 +603,23 @@ const weaponEl=document.getElementById('weapon');
 const waveEl=document.getElementById('wave');
 const remainingEl=document.getElementById('remaining');
 const waveBanner=document.getElementById('waveBanner');
+const sensitivityInput=document.getElementById('sensitivity');
+const sensitivityValue=document.getElementById('sensitivityValue');
+const sprintInput=document.getElementById('sprintSetting');
+sensitivityInput.value=String(save.mouseSensitivity);
+sensitivityValue.textContent=Number(save.mouseSensitivity).toFixed(4);
+sprintInput.checked=save.sprintEnabled;
+sensitivityInput.addEventListener('input',()=>{save.mouseSensitivity=Number(sensitivityInput.value);sensitivityValue.textContent=save.mouseSensitivity.toFixed(4);persist();});
+sprintInput.addEventListener('change',()=>{save.sprintEnabled=sprintInput.checked;persist();});
+function careerLevel(){return Math.floor(save.careerXP/100)+1;}
+function grantAchievement(id,label){
+  if(save.achievements.includes(id))return;
+  save.achievements.push(id);persist();playSfx('level');
+  waveBanner.textContent='🏆 ACHIEVEMENT: '+label;waveBanner.style.display='block';waveMessageTime=2.4;
+  const list=document.getElementById('achievementList');
+  if(list)list.textContent=achievementNames.filter(a=>save.achievements.includes(a[0])).map(a=>a[1]).join(' · ')||'No achievements yet.';
+}
+const achievementNames=[['first-blast','First Blast'],['marksman-25','25 Eliminations'],['veteran-100','100 Eliminations'],['wave-5','Wave 5 Survivor'],['boss-breaker','Boss Breaker'],['level-5','Level 5']];
 
 function currentWeapon(){
   return weapons[save.weapon] || weapons.starter;
@@ -584,6 +645,13 @@ function updateHUD(){
   waveEl.textContent=wave || 1;
   remainingEl.textContent=bots.length;
   document.getElementById('careerXP').textContent=save.careerXP;
+  const level=careerLevel(), levelXP=save.careerXP%100;
+  document.getElementById('careerLevel').textContent=level;
+  document.getElementById('levelHud').textContent='🏅 Level '+level;
+  document.getElementById('xpProgress').textContent=levelXP+' / 100 XP';
+  document.getElementById('xpFill').style.width=levelXP+'%';
+  document.getElementById('bestWave').textContent=save.bestWave;
+  document.getElementById('achievementList').textContent=achievementNames.filter(a=>save.achievements.includes(a[0])).map(a=>a[1]).join(' · ')||'No achievements yet. Start your first run!';
   document.getElementById('speedInfo').textContent=
     `Movement level ${save.speedLevel}/5.`;
   updateShop();
@@ -701,12 +769,20 @@ function burst(position,color){
 function removeBot(index){
   const bot=bots[index];
   burst(new THREE.Vector3(bot.position.x,.8,bot.position.z),0xff5577);
+  playSfx('boom');
   scene.remove(bot);
   bots.splice(index,1);
   save.coins+=bot.userData.isBoss?150:10;
   save.careerXP+=bot.userData.isBoss?100:10;
   save.bestWave=Math.max(save.bestWave,wave);
   kills++;
+  if(kills===1)grantAchievement('first-blast','First Blast');
+  if(kills>=25)grantAchievement('marksman-25','25 Eliminations');
+  if(kills>=100)grantAchievement('veteran-100','100 Eliminations');
+  if(bot.userData.isBoss)grantAchievement('boss-breaker','Boss Breaker');
+  const oldLevel=Math.floor((save.careerXP-(bot.userData.isBoss?100:10))/100)+1;
+  if(careerLevel()>oldLevel)playSfx('level');
+  if(careerLevel()>=5)grantAchievement('level-5','Level 5');
   persist();
   updateHUD();
 }
@@ -714,6 +790,7 @@ function removeBot(index){
 function shoot(){
   if(!running||fireCooldown>0)return;
   fireCooldown=currentWeapon().delay;
+  playSfx('shot');
   const direction=new THREE.Vector3();
   camera.getWorldDirection(direction);
   const weapon=currentWeapon();
@@ -743,8 +820,8 @@ let mouseDown=false;
 
 renderer.domElement.addEventListener('pointermove',e=>{
   if(document.pointerLockElement===renderer.domElement && running){
-    yaw-=e.movementX*.0025;
-    pitch-=e.movementY*.0025;
+    yaw-=e.movementX*save.mouseSensitivity;
+    pitch-=e.movementY*save.mouseSensitivity;
     pitch=THREE.MathUtils.clamp(pitch,-1.15,1.15);
     camera.rotation.order='YXZ';
     camera.rotation.y=yaw;
@@ -840,6 +917,7 @@ function showMenu(gameOver=false){
   running=false;
   stopMusic();
   audioToggle.style.display='none';
+  sfxToggle.style.display='none';
   document.getElementById('musicBadge').style.display='none';
   if(document.pointerLockElement) document.exitPointerLock();
   menu.style.display='flex';
@@ -900,6 +978,7 @@ function startGame(){
 
   running=true;
   audioToggle.style.display='block';
+  sfxToggle.style.display='block';
   document.getElementById('musicBadge').style.display='block';
   updateHUD();
   startMusic();
@@ -948,7 +1027,7 @@ function animate(){
     if(length>0){
       forward/=length;
       strafe/=length;
-      const speed=6.2+save.speedLevel*1.15;
+      const speed=(keys.shift&&save.sprintEnabled?8.6:6.2)+save.speedLevel*1.15;
       player.position.x+=(-Math.sin(yaw)*forward+Math.cos(yaw)*strafe)*speed*dt;
       player.position.z+=(-Math.cos(yaw)*forward-Math.sin(yaw)*strafe)*speed*dt;
     }
@@ -971,8 +1050,12 @@ function animate(){
         waveBanner.textContent='BOSS PHASE 2!'; waveBanner.style.display='block'; waveMessageTime=2;
       }
 
-      bot.position.x+=(vx/distance)*bot.userData.speed*dt;
-      bot.position.z+=(vz/distance)*bot.userData.speed*dt;
+      // Bots mix pursuit with a light strafe so they do not all run in a straight line.
+      const strafe=Math.sin(gameTime*1.7+i*2.1)*(distance>3?0.48:0.12);
+      const moveX=(vx/distance)-((vz/distance)*strafe);
+      const moveZ=(vz/distance)+((vx/distance)*strafe);
+      bot.position.x+=moveX*bot.userData.speed*dt;
+      bot.position.z+=moveZ*bot.userData.speed*dt;
       bot.rotation.y=Math.atan2(vx,vz);
       bot.position.y=Math.abs(Math.sin(gameTime*5+i))*.05;
 
@@ -1005,6 +1088,7 @@ function animate(){
         );
         if(distance<.85){
           bot.userData.hp-=dart.damage;
+          playSfx('hit');
           burst(dart.mesh.position.clone(),currentWeapon().color);
           hit=true;
           if(bot.userData.hp<=0)removeBot(j);
@@ -1029,7 +1113,10 @@ function animate(){
     }
     if(wavePause>0){
       wavePause-=dt;
-      if(wavePause<=0 && running) startWave();
+      if(wavePause<=0 && running){
+        if(wave>=5)grantAchievement('wave-5','Wave 5 Survivor');
+        startWave();
+      }
     }
     if(waveMessageTime>0){
       waveMessageTime-=dt;
