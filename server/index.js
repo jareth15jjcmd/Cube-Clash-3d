@@ -172,6 +172,23 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (msg.type === "wave") {
+      // Only the room host may publish the room's wave number.
+      // This synchronizes the room's shared wave indicator; enemy simulation
+      // remains client-side until enemy state/combat replication is implemented.
+      const requestedWave = Number(msg.wave);
+      if (client.id !== room.hostId) {
+        send(ws, "wave-sync", { wave: room.wave, hostOnly: true });
+        return;
+      }
+      if (!Number.isInteger(requestedWave) || requestedWave < 1 || requestedWave > 100000) {
+        return send(ws, "error", { message: "Invalid wave number." });
+      }
+      room.wave = requestedWave;
+      broadcast(room, "wave-sync", { wave: room.wave, hostId: room.hostId });
+      return;
+    }
+
     if (msg.type === "ping") {
       send(ws, "pong", { time: Date.now() });
       return;
